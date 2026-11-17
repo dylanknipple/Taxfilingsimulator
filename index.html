@@ -1,0 +1,2258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2026 Federal Tax E-Filing Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .step-active { background-color: #4F46E5; color: white; }
+        .step-complete { background-color: #10B981; color: white; }
+        .step-inactive { background-color: #E2E8F0; color: #64748B; }
+        
+        /* Custom radio pill styling for clean unselected -> selected states */
+        .yn-label input[type="radio"] {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .yn-btn {
+            transition: all 0.15s ease-in-out;
+        }
+        .yn-label input[type="radio"]:checked + .yn-btn-yes {
+            background-color: #4F46E5;
+            color: #ffffff;
+            border-color: #4F46E5;
+            box-shadow: 0 2px 4px rgba(79, 70, 229, 0.25);
+        }
+        .yn-label input[type="radio"]:checked + .yn-btn-no {
+            background-color: #334155;
+            color: #ffffff;
+            border-color: #334155;
+            box-shadow: 0 2px 4px rgba(51, 65, 85, 0.2);
+        }
+        .ded-label input[type="radio"] {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .ded-label input[type="radio"]:checked + .ded-card {
+            border-color: #4F46E5;
+            background-color: #EEF2FF;
+            box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+        }
+        .ded-label input[type="radio"]:checked + .ded-card .ded-dot {
+            border-color: #4F46E5;
+            background-color: #4F46E5;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        @media print {
+            body * { visibility: hidden; }
+            #detailsModal, #detailsModal * { visibility: visible; }
+            #detailsModal {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                background: white !important;
+                padding: 0 !important;
+            }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col justify-between">
+
+    <!-- Persistent Top Status Bar -->
+    <header class="sticky top-0 z-40 bg-slate-900 text-white shadow-lg border-b border-slate-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-wrap items-center justify-between py-2.5 sm:h-16 gap-2">
+                <!-- Brand & Student Badge -->
+                <div class="flex items-center space-x-3">
+                    <div class="bg-indigo-600 p-2 rounded-lg text-white shadow-sm">
+                        <i class="fa-solid fa-file-invoice-dollar text-lg sm:text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <h1 class="font-bold text-base sm:text-lg leading-tight tracking-tight">2026 E-File Tax Simulator</h1>
+                            <span class="hidden sm:inline-block text-[10px] font-bold uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded">TY 2026</span>
+                        </div>
+                        <!-- Student Name Status Badge in Header -->
+                        <div class="flex items-center space-x-1.5 mt-0.5">
+                            <span id="headerStudentBadge" class="inline-flex items-center text-xs text-amber-300 font-medium cursor-pointer hover:underline" onclick="goToStep(1)">
+                                <i class="fa-solid fa-triangle-exclamation mr-1 text-[10px]"></i> Student Name Not Locked
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Metrics Display -->
+                <div class="flex items-center space-x-4 sm:space-x-6 ml-auto">
+                    <div class="text-right border-l border-slate-700 pl-3 sm:pl-5">
+                        <span class="block text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Est. Adjusted Gross Income</span>
+                        <span id="liveAGI" class="font-bold text-sm sm:text-base text-slate-100">$0.00</span>
+                    </div>
+                    <div class="text-right border-l border-slate-700 pl-3 sm:pl-5">
+                        <span class="block text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Est. Tax Outcome</span>
+                        <span id="liveTaxOutcome" class="font-extrabold text-sm sm:text-lg text-slate-300">$0.00</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 flex-grow w-full">
+
+        <!-- Step Progress Tracker -->
+        <div class="mb-6 bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200">
+            <div class="flex items-center justify-between text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider">
+                <span id="stepTitleTracker">Step 1: Student Lock-In & Filing Status</span>
+                <span id="progressPercent" class="text-indigo-600 font-bold">Step 1 of 6 (17%)</span>
+            </div>
+            <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden border border-slate-200/60">
+                <div id="progressBar" class="bg-indigo-600 h-2.5 rounded-full transition-all duration-300" style="width: 16.66%"></div>
+            </div>
+
+            <!-- Interactive Step Navigation Pills -->
+            <div class="grid grid-cols-3 sm:grid-cols-6 gap-2 mt-4 pt-3 border-t border-slate-100">
+                <button type="button" onclick="goToStep(1)" id="stepPill1" class="step-pill flex items-center justify-center sm:justify-start space-x-1.5 text-xs font-semibold text-indigo-600 p-1.5 rounded-lg hover:bg-slate-50 transition">
+                    <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs step-active font-bold shrink-0">1</span>
+                    <span class="truncate">Status</span>
+                </button>
+                <button type="button" onclick="goToStep(2)" id="stepPill2" class="step-pill flex items-center justify-center sm:justify-start space-x-1.5 text-xs font-medium text-slate-400 p-1.5 rounded-lg hover:bg-slate-50 transition">
+                    <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs step-inactive font-bold shrink-0">2</span>
+                    <span class="truncate">Income</span>
+                </button>
+                <button type="button" onclick="goToStep(3)" id="stepPill3" class="step-pill flex items-center justify-center sm:justify-start space-x-1.5 text-xs font-medium text-slate-400 p-1.5 rounded-lg hover:bg-slate-50 transition">
+                    <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs step-inactive font-bold shrink-0">3</span>
+                    <span class="truncate">Deductions</span>
+                </button>
+                <button type="button" onclick="goToStep(4)" id="stepPill4" class="step-pill flex items-center justify-center sm:justify-start space-x-1.5 text-xs font-medium text-slate-400 p-1.5 rounded-lg hover:bg-slate-50 transition">
+                    <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs step-inactive font-bold shrink-0">4</span>
+                    <span class="truncate">Other Taxes</span>
+                </button>
+                <button type="button" onclick="goToStep(5)" id="stepPill5" class="step-pill flex items-center justify-center sm:justify-start space-x-1.5 text-xs font-medium text-slate-400 p-1.5 rounded-lg hover:bg-slate-50 transition">
+                    <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs step-inactive font-bold shrink-0">5</span>
+                    <span class="truncate">Credits</span>
+                </button>
+                <button type="button" onclick="goToStep(6)" id="stepPill6" class="step-pill flex items-center justify-center sm:justify-start space-x-1.5 text-xs font-medium text-slate-400 p-1.5 rounded-lg hover:bg-slate-50 transition">
+                    <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs step-inactive font-bold shrink-0">6</span>
+                    <span class="truncate">Results</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Step Completion Gentle Reminder Banner -->
+        <div id="unansweredBanner" class="hidden mb-5 bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-xl flex items-center justify-between text-xs sm:text-sm shadow-sm">
+            <div class="flex items-center space-x-2.5">
+                <i class="fa-solid fa-circle-info text-amber-600 text-base"></i>
+                <span id="unansweredBannerText">You still have unanswered questions on this step. Be sure to select Yes or No for every item.</span>
+            </div>
+        </div>
+
+        <!-- Main Simulator Form Card -->
+        <div class="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+            <form id="taxForm" onsubmit="return false;">
+
+                <!-- ========================================== -->
+                <!-- STEP 1: STUDENT LOCK-IN & FILING STATUS    -->
+                <!-- ========================================== -->
+                <div id="step1" class="step-content p-6 sm:p-8">
+                    <!-- Mandatory Student Name Lock-In Card -->
+                    <div id="studentLockCard" class="mb-8 p-5 sm:p-6 rounded-2xl bg-indigo-50/80 border-2 border-indigo-200 shadow-sm transition-all">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                            <div class="flex items-center space-x-2.5">
+                                <div class="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold">
+                                    <i class="fa-solid fa-user-check text-sm"></i>
+                                </div>
+                                <div>
+                                    <h3 class="font-bold text-slate-900 text-base">Student Verification & Name Lock-In</h3>
+                                    <p class="text-xs text-slate-600">Enter your full name and lock it in so it appears on your final Details screen for grading.</p>
+                                </div>
+                            </div>
+                            <span id="lockStatusBadge" class="inline-flex items-center self-start sm:self-center px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                <i class="fa-solid fa-unlock mr-1.5"></i> Required Before Viewing Results
+                            </span>
+                        </div>
+
+                        <div class="flex flex-col sm:flex-row gap-3 mt-4">
+                            <div class="relative flex-grow">
+                                <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
+                                    <i class="fa-solid fa-id-card"></i>
+                                </span>
+                                <input type="text" id="studentNameInput" placeholder="Enter your First and Last Name..." class="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-semibold text-slate-900 transition">
+                            </div>
+                            <button type="button" id="lockNameBtn" onclick="lockStudentNamePermanently()" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl shadow transition flex items-center justify-center space-x-2 shrink-0">
+                                <i class="fa-solid fa-lock"></i>
+                                <span>Lock In Student Name</span>
+                            </button>
+                            <div id="permanentLockedPill" class="hidden px-4 py-2.5 bg-emerald-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-sm flex items-center justify-center space-x-2 shrink-0 select-none">
+                                <i class="fa-solid fa-shield-halved"></i>
+                                <span id="permanentLockedPillText">Permanently Locked</span>
+                            </div>
+                        </div>
+                        <p id="nameHelpNotice" class="text-[11px] text-slate-500 mt-2">
+                            <i class="fa-solid fa-circle-info mr-1 text-indigo-600"></i> <strong>Note:</strong> Once locked in, your name cannot be edited or unlocked during this session.
+                        </p>
+                        <p id="nameErrorMsg" class="hidden text-xs font-semibold text-rose-600 mt-2">
+                            <i class="fa-solid fa-circle-exclamation mr-1"></i> Please enter your full name before locking in.
+                        </p>
+                    </div>
+
+                    <div class="border-b border-slate-200 pb-4 mb-6">
+                        <h2 class="text-xl font-bold text-slate-900">Step 1: Filing Status & Personal Details</h2>
+                        <p class="text-sm text-slate-500 mt-1">Select your filing status and answer every personal detail question below.</p>
+                    </div>
+
+                    <div class="space-y-6">
+                        <!-- Filing Status Dropdown (Unselected by default) -->
+                        <div>
+                            <div class="flex items-center space-x-2 mb-2">
+                                <label for="filingStatus" class="block text-sm font-bold text-slate-800">Filing Status</label>
+                                <button type="button" class="text-indigo-600 hover:text-indigo-800" onclick="showInfoModal('Filing Status', 'Your filing status determines your standard deduction and tax brackets. Unmarried individuals who do not qualify for Head of Household file as Single.')">
+                                    <i class="fa-regular fa-circle-question"></i>
+                                </button>
+                            </div>
+                            <select id="filingStatus" onchange="calculateTaxes(); checkStepCompletion();" class="w-full max-w-md px-4 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 text-slate-800 font-medium shadow-sm">
+                                <option value="" disabled selected>-- Select Filing Status --</option>
+                                <option value="Single">Single</option>
+                                <option value="Married Filing Jointly">Married Filing Jointly</option>
+                                <option value="Married Filing Separately">Married Filing Separately</option>
+                                <option value="Head of Household">Head of Household</option>
+                            </select>
+                        </div>
+
+                        <!-- Personal Yes/No Questions (All Unselected by Default) -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                            <!-- Age 65 or older -->
+                            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-between">
+                                <div class="flex items-start justify-between mb-3">
+                                    <span class="text-sm font-semibold text-slate-800">Are you 65 or older?</span>
+                                    <button type="button" class="text-indigo-600 hover:text-indigo-800 ml-2" onclick="showInfoModal('Age 65 or Older', 'Taxpayers who are age 65 or older at the end of the tax year qualify for an additional standard deduction amount.')">
+                                        <i class="fa-regular fa-circle-question"></i>
+                                    </button>
+                                </div>
+                                <div class="flex space-x-3">
+                                    <label class="yn-label flex-1 cursor-pointer">
+                                        <input type="radio" name="age65" value="Yes" onchange="calculateTaxes(); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes block text-center py-2 px-4 rounded-lg border border-slate-300 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label flex-1 cursor-pointer">
+                                        <input type="radio" name="age65" value="No" onchange="calculateTaxes(); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no block text-center py-2 px-4 rounded-lg border border-slate-300 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Legally Blind -->
+                            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-between">
+                                <div class="flex items-start justify-between mb-3">
+                                    <span class="text-sm font-semibold text-slate-800">Are you legally blind?</span>
+                                    <button type="button" class="text-indigo-600 hover:text-indigo-800 ml-2" onclick="showInfoModal('Legally Blind', 'Taxpayers who are legally blind on the last day of the tax year receive an additional standard deduction.')">
+                                        <i class="fa-regular fa-circle-question"></i>
+                                    </button>
+                                </div>
+                                <div class="flex space-x-3">
+                                    <label class="yn-label flex-1 cursor-pointer">
+                                        <input type="radio" name="legallyBlind" value="Yes" onchange="calculateTaxes(); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes block text-center py-2 px-4 rounded-lg border border-slate-300 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label flex-1 cursor-pointer">
+                                        <input type="radio" name="legallyBlind" value="No" onchange="calculateTaxes(); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no block text-center py-2 px-4 rounded-lg border border-slate-300 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Claimed by Another Taxpayer -->
+                            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-between">
+                                <div class="flex items-start justify-between mb-3">
+                                    <span class="text-sm font-semibold text-slate-800">Are you claimed by another taxpayer?</span>
+                                    <button type="button" class="text-indigo-600 hover:text-indigo-800 ml-2" onclick="showInfoModal('Claimed by Another Taxpayer', 'If your parents or guardians provide more than half of your financial support and claim you as a dependent on their tax return, select Yes. If you live independently and support yourself, select No.')">
+                                        <i class="fa-regular fa-circle-question"></i>
+                                    </button>
+                                </div>
+                                <div class="flex space-x-3">
+                                    <label class="yn-label flex-1 cursor-pointer">
+                                        <input type="radio" name="claimedByOther" value="Yes" onchange="calculateTaxes(); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes block text-center py-2 px-4 rounded-lg border border-slate-300 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label flex-1 cursor-pointer">
+                                        <input type="radio" name="claimedByOther" value="No" onchange="calculateTaxes(); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no block text-center py-2 px-4 rounded-lg border border-slate-300 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Claim Dependents -->
+                            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-between">
+                                <div class="flex items-start justify-between mb-3">
+                                    <span class="text-sm font-semibold text-slate-800">Do you qualify to claim one or more Dependent(s) on your tax return?</span>
+                                    <button type="button" class="text-indigo-600 hover:text-indigo-800 ml-2" onclick="showInfoModal('Claiming Dependents', 'Select Yes only if you financially support a qualifying child or qualifying relative.')">
+                                        <i class="fa-regular fa-circle-question"></i>
+                                    </button>
+                                </div>
+                                <div class="flex space-x-3">
+                                    <label class="yn-label flex-1 cursor-pointer">
+                                        <input type="radio" name="hasDependents" value="Yes" onchange="toggleConditional('dependentsCountBox', true); calculateTaxes(); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes block text-center py-2 px-4 rounded-lg border border-slate-300 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label flex-1 cursor-pointer">
+                                        <input type="radio" name="hasDependents" value="No" onchange="toggleConditional('dependentsCountBox', false); calculateTaxes(); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no block text-center py-2 px-4 rounded-lg border border-slate-300 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                                <div id="dependentsCountBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Number of Qualifying Dependents:</label>
+                                    <input type="number" id="dependentsCount" min="1" step="1" placeholder="0" class="w-32 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ========================================== -->
+                <!-- STEP 2: INCOME & W-2 WITHHOLDINGS          -->
+                <!-- ========================================== -->
+                <div id="step2" class="step-content p-6 sm:p-8 hidden">
+                    <div class="border-b border-slate-200 pb-4 mb-6">
+                        <h2 class="text-xl font-bold text-slate-900">Step 2: Tax Year Income & Federal Withholding</h2>
+                        <p class="text-sm text-slate-500 mt-1">Select Yes or No for each income category. Selecting Yes opens the dollar input field.</p>
+                    </div>
+
+                    <div class="space-y-4" id="step2Questions">
+                        <!-- 1. W-2 Tax Year Income -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-sm font-bold text-slate-800">Tax Year Income (W-2 Wages, Tips, Other Compensation)</span>
+                                    <button type="button" class="text-indigo-600 hover:text-indigo-800" onclick="showInfoModal('Form W-2 Wages & Withholding', 'Box 1 shows your total taxable wages, tips, and compensation earned from your employer. Box 2 shows how much Federal Income Tax was already withheld from your paychecks.')">
+                                        <i class="fa-regular fa-circle-question"></i>
+                                    </button>
+                                </div>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasW2" value="Yes" onchange="toggleConditional('w2Box', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasW2" value="No" onchange="toggleConditional('w2Box', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="w2Box" class="hidden mt-4 pt-4 border-t border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div class="bg-white p-3.5 rounded-xl border border-indigo-200">
+                                    <label class="block text-xs font-bold text-indigo-950 mb-1">W-2 Line 1: Wages, Tips, Other Compensation ($)</label>
+                                    <div class="relative">
+                                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 font-semibold">$</span>
+                                        <input type="number" step="0.01" id="w2Wages" placeholder="0.00" class="w-full pl-7 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white font-semibold text-sm text-slate-900" oninput="calculateTaxes()">
+                                    </div>
+                                </div>
+                                <div class="bg-white p-3.5 rounded-xl border border-indigo-200">
+                                    <label class="block text-xs font-bold text-indigo-950 mb-1">W-2 Line 2: Federal Income Tax Withheld ($)</label>
+                                    <div class="relative">
+                                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 font-semibold">$</span>
+                                        <input type="number" step="0.01" id="w2Withheld" placeholder="0.00" class="w-full pl-7 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white font-semibold text-sm text-slate-900" oninput="calculateTaxes()">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 2. Overtime Payment -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <span class="text-sm font-medium text-slate-800">Your Overtime Payment</span>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasOvertime" value="Yes" onchange="toggleConditional('overtimeBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasOvertime" value="No" onchange="toggleConditional('overtimeBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="overtimeBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Overtime Income Amount ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="overtimeAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3. Tip Income -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <span class="text-sm font-medium text-slate-800">Your Tip Income (e.g., restaurant serving)</span>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasTips" value="Yes" onchange="toggleConditional('tipsBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasTips" value="No" onchange="toggleConditional('tipsBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="tipsBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Unreported / Additional Tip Income ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="tipsAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 4. Social Security Benefits -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <span class="text-sm font-medium text-slate-800">Social Security Benefits Income</span>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasSSB" value="Yes" onchange="toggleConditional('ssbBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasSSB" value="No" onchange="toggleConditional('ssbBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="ssbBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Taxable Social Security Benefits ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="ssbAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 5. Long-Term Capital Gains/Losses -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-sm font-medium text-slate-800">Long-Term Capital Gains / Losses (Investments held &gt; 1 year)</span>
+                                    <button type="button" class="text-indigo-600 hover:text-indigo-800" onclick="showInfoModal('Long-Term Capital Gains', 'Profits or losses from selling stocks, bonds, or investments held for MORE than one year. Long-term gains are taxed at lower preferential rates (0%, 15%, or 20%).')">
+                                        <i class="fa-regular fa-circle-question"></i>
+                                    </button>
+                                </div>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasLTCG" value="Yes" onchange="toggleConditional('ltcgBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasLTCG" value="No" onchange="toggleConditional('ltcgBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="ltcgBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Net Long-Term Gain or Loss ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="ltcgAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 6. Short-Term Capital Gains/Losses -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-sm font-medium text-slate-800">Short-Term Capital Gains / Losses (Investments held &le; 1 year)</span>
+                                    <button type="button" class="text-indigo-600 hover:text-indigo-800" onclick="showInfoModal('Short-Term Capital Gains', 'Profits or losses from buying and selling stocks or investments within one year or less. Short-term capital gains are taxed at your ordinary income tax rate.')">
+                                        <i class="fa-regular fa-circle-question"></i>
+                                    </button>
+                                </div>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasSTCG" value="Yes" onchange="toggleConditional('stcgBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasSTCG" value="No" onchange="toggleConditional('stcgBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="stcgBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Net Short-Term Gain or Loss ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="stcgAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 7. Self-Employment -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <span class="text-sm font-medium text-slate-800">Self-Employment Income (1099-NEC / Freelance)</span>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasSelfEmp" value="Yes" onchange="toggleConditional('selfEmpBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasSelfEmp" value="No" onchange="toggleConditional('selfEmpBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="selfEmpBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Net Self-Employment Income ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="selfEmpAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 8. Retirement Income -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <span class="text-sm font-medium text-slate-800">Retirement Income / Distributions (1099-R)</span>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasRetirementInc" value="Yes" onchange="toggleConditional('retirementIncBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasRetirementInc" value="No" onchange="toggleConditional('retirementIncBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="retirementIncBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Taxable Retirement Distributions ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="retirementIncAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 9. Interest & Dividends (1099-INT) -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-sm font-medium text-slate-800">Interest / Dividends (Form 1099-INT Interest Income)</span>
+                                    <button type="button" class="text-indigo-600 hover:text-indigo-800" onclick="showInfoModal('Form 1099-INT Interest Income', 'Banks and credit unions send Form 1099-INT reporting interest earned on your savings accounts or CDs during the year. Enter the amount from Box 1 (Interest Income).')">
+                                        <i class="fa-regular fa-circle-question"></i>
+                                    </button>
+                                </div>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasInterest" value="Yes" onchange="toggleConditional('interestBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasInterest" value="No" onchange="toggleConditional('interestBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="interestBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">1099-INT Interest Income Box Amount ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="interestAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 10. Additional Income - Schedule 1 -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <span class="text-sm font-medium text-slate-800">Additional Income - Schedule 1 (Prizes, Unemployment, etc.)</span>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasSched1" value="Yes" onchange="toggleConditional('sched1Box', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasSched1" value="No" onchange="toggleConditional('sched1Box', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="sched1Box" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Additional Schedule 1 Income ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="sched1Amt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ========================================== -->
+                <!-- STEP 3: DEDUCTIONS & DEDUCTION METHOD      -->
+                <!-- ========================================== -->
+                <div id="step3" class="step-content p-6 sm:p-8 hidden">
+                    <div class="border-b border-slate-200 pb-4 mb-6">
+                        <h2 class="text-xl font-bold text-slate-900">Step 3: Deductions & Adjustments to Income</h2>
+                        <p class="text-sm text-slate-500 mt-1">Above-the-line deductions reduce your <strong>Adjusted Gross Income (AGI)</strong> in addition to the Standard Deduction. Watch your Estimated AGI and Tax Outcome update as you enter these!</p>
+                    </div>
+
+                    <div class="space-y-4">
+                        <!-- 1. Educator Expenses -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-sm font-medium text-slate-800">Educator Expenses</span>
+                                    <button type="button" class="text-indigo-600 hover:text-indigo-800" onclick="showInfoModal('Educator Expenses', 'Eligible K-12 teachers, instructors, counselors, and principals can deduct unreimbursed classroom books, supplies, and equipment.')">
+                                        <i class="fa-regular fa-circle-question"></i>
+                                    </button>
+                                </div>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasEducator" value="Yes" onchange="toggleConditional('educatorBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasEducator" value="No" onchange="toggleConditional('educatorBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="educatorBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Educator Expense Amount ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="educatorAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 2. Reservist / Performing Artists -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <span class="text-sm font-medium text-slate-800">Reservist / Performing Artists / Fee-basis Government Expenses</span>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasReservist" value="Yes" onchange="toggleConditional('reservistBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasReservist" value="No" onchange="toggleConditional('reservistBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="reservistBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Expense Amount ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="reservistAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3. HSA Contributions -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-sm font-medium text-slate-800">Health Savings Account (HSA) Contributions</span>
+                                    <button type="button" class="text-indigo-600 hover:text-indigo-800" onclick="showInfoModal('Health Savings Account (HSA)', 'An HSA is a tax-advantaged medical savings account for people enrolled in a high-deductible health plan. Contributions are 100% tax-deductible and lower your Adjusted Gross Income.')">
+                                        <i class="fa-regular fa-circle-question"></i>
+                                    </button>
+                                </div>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasHSA" value="Yes" onchange="toggleConditional('hsaBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasHSA" value="No" onchange="toggleConditional('hsaBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="hsaBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">HSA Contribution Amount ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="hsaAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 4. Student Loan Interest -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-sm font-medium text-slate-800">Student Loan Interest / Tuition and Fees</span>
+                                    <button type="button" class="text-indigo-600 hover:text-indigo-800" onclick="showInfoModal('Student Loan Interest Deduction', 'Interest paid on qualified student loans (reported on Form 1098-E) can be deducted directly from your income up to $2,500 per year.')">
+                                        <i class="fa-regular fa-circle-question"></i>
+                                    </button>
+                                </div>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasStudentLoan" value="Yes" onchange="toggleConditional('studentLoanBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasStudentLoan" value="No" onchange="toggleConditional('studentLoanBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="studentLoanBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Student Loan Interest Paid ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="studentLoanAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 5. Pre-tax IRA / 401(k) -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-sm font-medium text-slate-800">Pre-tax IRA / 401(k) Contributions</span>
+                                    <button type="button" class="text-indigo-600 hover:text-indigo-800" onclick="showInfoModal('Pre-tax IRA & 401(k) Contributions', 'Money you contribute to a Traditional IRA or pre-tax retirement plan lowers your taxable income for the current year.')">
+                                        <i class="fa-regular fa-circle-question"></i>
+                                    </button>
+                                </div>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasIRA" value="Yes" onchange="toggleConditional('iraBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasIRA" value="No" onchange="toggleConditional('iraBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="iraBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Pre-tax Retirement Contribution ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="iraAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 6. Early Withdrawal Penalty -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <span class="text-sm font-medium text-slate-800">Early Withdrawal of Retirement / Savings Penalty</span>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasEarlyPenalty" value="Yes" onchange="toggleConditional('earlyPenaltyBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasEarlyPenalty" value="No" onchange="toggleConditional('earlyPenaltyBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="earlyPenaltyBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Penalty Amount ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="earlyPenaltyAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 7. Alimony Paid -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <span class="text-sm font-medium text-slate-800">Alimony Paid</span>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasAlimony" value="Yes" onchange="toggleConditional('alimonyBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasAlimony" value="No" onchange="toggleConditional('alimonyBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="alimonyBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Deductible Alimony Paid ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="alimonyAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 8. Moving Expenses -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-sm font-medium text-slate-800">Moving Expenses</span>
+                                    <button type="button" class="text-indigo-600 hover:text-indigo-800" onclick="showInfoModal('Moving Expenses', 'Unreimbursed moving expenses incurred when relocating for a new job or active-duty military station change.')">
+                                        <i class="fa-regular fa-circle-question"></i>
+                                    </button>
+                                </div>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasMoving" value="Yes" onchange="toggleConditional('movingBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasMoving" value="No" onchange="toggleConditional('movingBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="movingBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Qualifying Moving Expenses ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="movingAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 9. Self-Employed Health Care Premiums -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <span class="text-sm font-medium text-slate-800">Self-Employed Health Care Premiums</span>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasSEHealth" value="Yes" onchange="toggleConditional('seHealthBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasSEHealth" value="No" onchange="toggleConditional('seHealthBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="seHealthBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Health Care Premiums Paid ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="seHealthAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 10. Self-Employed Retirement Plan Contributions -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <span class="text-sm font-medium text-slate-800">Self-Employed Retirement Plan Contributions</span>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasSERetire" value="Yes" onchange="toggleConditional('seRetireBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasSERetire" value="No" onchange="toggleConditional('seRetireBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="seRetireBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">SEP / SIMPLE / Solo 401(k) Contribution ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="seRetireAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 11. Charitable Contributions -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-sm font-medium text-slate-800">Charitable Contributions</span>
+                                    <button type="button" class="text-indigo-600 hover:text-indigo-800" onclick="showInfoModal('Charitable Contributions', 'Cash or property donated to qualified 501(c)(3) charitable organizations. Under 2026 rules, eligible non-itemizers may also claim a charitable deduction.')">
+                                        <i class="fa-regular fa-circle-question"></i>
+                                    </button>
+                                </div>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasCharity" value="Yes" onchange="toggleConditional('charityBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasCharity" value="No" onchange="toggleConditional('charityBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="charityBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Charitable Donation Amount ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="charityAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Select Your Deduction Method (Unselected by default) -->
+                        <div class="pt-5 mt-4 border-t-2 border-slate-200">
+                            <div class="flex items-center space-x-2 mb-3">
+                                <label class="block text-base font-bold text-slate-900">Select Your Deduction Method</label>
+                                <button type="button" class="text-indigo-600 hover:text-indigo-800" onclick="showInfoModal('Standard vs. Itemized Deduction', 'Most taxpayers take the Standard Deduction—a flat dollar amount ($16,100 for Single filers in 2026) that reduces your taxable income. You only itemize if your qualifying mortgage interest, state/local taxes, and medical expenses exceed the standard deduction.')">
+                                    <i class="fa-regular fa-circle-question"></i>
+                                </button>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <label class="ded-label cursor-pointer">
+                                    <input type="radio" name="deductionMethod" value="Standard" onchange="toggleItemizedInput(false); checkStepCompletion();">
+                                    <div class="ded-card p-4 rounded-xl border-2 border-slate-200 bg-white hover:border-indigo-300 transition flex items-center justify-between">
+                                        <div>
+                                            <span class="block text-sm font-bold text-slate-900">Standard Deduction</span>
+                                            <span id="standardDedDisplay" class="text-xs font-semibold text-indigo-600">$16,100 (2026 Single)</span>
+                                        </div>
+                                        <span class="ded-dot w-4 h-4 rounded-full border-2 border-slate-300"></span>
+                                    </div>
+                                </label>
+
+                                <label class="ded-label cursor-pointer">
+                                    <input type="radio" name="deductionMethod" value="Itemized" onchange="toggleItemizedInput(true); checkStepCompletion();">
+                                    <div class="ded-card p-4 rounded-xl border-2 border-slate-200 bg-white hover:border-indigo-300 transition flex items-center justify-between">
+                                        <div>
+                                            <span class="block text-sm font-bold text-slate-900">Itemized Deductions</span>
+                                            <span class="text-xs text-slate-500">Enter custom Schedule A total</span>
+                                        </div>
+                                        <span class="ded-dot w-4 h-4 rounded-full border-2 border-slate-300"></span>
+                                    </div>
+                                </label>
+                            </div>
+
+                            <div id="itemizedBox" class="hidden mt-3 p-4 bg-indigo-50/70 rounded-xl border border-indigo-200">
+                                <label class="block text-xs font-bold text-indigo-950 mb-1">Total Itemized Deductions ($):</label>
+                                <div class="relative w-56">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="itemizedAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-2 bg-white border border-slate-300 rounded-lg text-sm font-semibold text-slate-900" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 12. Remaining Other Deductions -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 mt-4">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <span class="text-sm font-medium text-slate-800">Remaining Other Deductions (Qualified Business Income / Other)</span>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasOtherDed" value="Yes" onchange="toggleConditional('otherDedBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasOtherDed" value="No" onchange="toggleConditional('otherDedBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="otherDedBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Other Deduction Amount ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="otherDedAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ========================================== -->
+                <!-- STEP 4: OTHER TAXES                        -->
+                <!-- ========================================== -->
+                <div id="step4" class="step-content p-6 sm:p-8 hidden">
+                    <div class="border-b border-slate-200 pb-4 mb-6">
+                        <h2 class="text-xl font-bold text-slate-900">Step 4: Other Taxes</h2>
+                        <p class="text-sm text-slate-500 mt-1">Select Yes or No for each item below. Selecting Yes opens a dollar input that adds to your tax liability.</p>
+                    </div>
+
+                    <div class="space-y-4">
+                        <!-- 1. Alternative Minimum Tax -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <span class="text-sm font-medium text-slate-800">Alternative Minimum Tax (AMT)</span>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="taxAMT" value="Yes" onchange="toggleConditional('amtBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="taxAMT" value="No" onchange="toggleConditional('amtBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="amtBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">AMT Amount ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="amtAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 2. First-Time Homebuyer Credit Repayment -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <span class="text-sm font-medium text-slate-800">First-Time Homebuyer Credit Repayment</span>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="taxHomebuyer" value="Yes" onchange="toggleConditional('homebuyerBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="taxHomebuyer" value="No" onchange="toggleConditional('homebuyerBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="homebuyerBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Repayment Amount ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="homebuyerAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3. Unreported Social Security / Medicare -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <span class="text-sm font-medium text-slate-800">Unreported Social Security / Medicare Tax</span>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="taxUnreported" value="Yes" onchange="toggleConditional('unreportedBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="taxUnreported" value="No" onchange="toggleConditional('unreportedBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="unreportedBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Tax Amount ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="unreportedAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 4. Premium Tax Credit Repayment -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <span class="text-sm font-medium text-slate-800">Premium Tax Credit Repayment</span>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="taxPremium" value="Yes" onchange="toggleConditional('premiumRepayBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="taxPremium" value="No" onchange="toggleConditional('premiumRepayBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="premiumRepayBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Repayment Amount ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="premiumRepayAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 5. Tax on IRAs -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <span class="text-sm font-medium text-slate-800">Additional Tax on IRAs / Retirement Plans</span>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="taxIRA" value="Yes" onchange="toggleConditional('taxIraBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="taxIRA" value="No" onchange="toggleConditional('taxIraBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="taxIraBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Additional IRA Tax ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="taxIraAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 6. Household Employment Taxes -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <span class="text-sm font-medium text-slate-800">Household Employment Taxes</span>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="taxHousehold" value="Yes" onchange="toggleConditional('householdBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="taxHousehold" value="No" onchange="toggleConditional('householdBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="householdBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Household Employment Tax ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="householdAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 7. Other Taxes You Pay -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <span class="text-sm font-medium text-slate-800">Other Taxes You Pay</span>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="taxOther" value="Yes" onchange="toggleConditional('otherTaxBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="taxOther" value="No" onchange="toggleConditional('otherTaxBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="otherTaxBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Other Taxes Amount ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="otherTaxAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ========================================== -->
+                <!-- STEP 5: TAX CREDITS                        -->
+                <!-- ========================================== -->
+                <div id="step5" class="step-content p-6 sm:p-8 hidden">
+                    <div class="border-b border-slate-200 pb-4 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                            <h2 class="text-xl font-bold text-slate-900">Step 5: Tax Credits</h2>
+                            <p class="text-sm text-slate-500 mt-1">Tax credits reduce your tax amount <strong>dollar-for-dollar</strong>. Answer Yes or No for each credit.</p>
+                        </div>
+                        <span class="self-start sm:self-center bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1 rounded-full border border-emerald-200">
+                            Dollar-for-Dollar Reduction
+                        </span>
+                    </div>
+
+                    <div class="space-y-4">
+                        <!-- 1. Child and Dependent Care Expenses -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-sm font-semibold text-slate-800">Child and Dependent Care Expenses</span>
+                                    <button type="button" class="text-indigo-600 hover:text-indigo-800" onclick="showInfoModal('Child & Dependent Care Credit', 'Credit for expenses paid for the care of a qualifying child (such as daycare or after-school care) so you can work or look for work.')">
+                                        <i class="fa-regular fa-circle-question"></i>
+                                    </button>
+                                </div>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasChildCare" value="Yes" onchange="toggleConditional('childCareBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasChildCare" value="No" onchange="toggleConditional('childCareBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="childCareBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Child & Dependent Care Credit ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="childCareAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 2. American Opportunity Credit -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-sm font-semibold text-slate-800">American Opportunity Credit (AOTC)</span>
+                                    <button type="button" class="text-indigo-600 hover:text-indigo-800" onclick="showInfoModal('American Opportunity Tax Credit (AOTC)', 'Credit for qualified college tuition and course materials paid for during the first four years of higher education (documented on Form 1098-T). Up to 40% (up to $1,000) may be refundable.')">
+                                        <i class="fa-regular fa-circle-question"></i>
+                                    </button>
+                                </div>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasAOTC" value="Yes" onchange="toggleConditional('aotcBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasAOTC" value="No" onchange="toggleConditional('aotcBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="aotcBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">American Opportunity Credit Amount ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="aotcAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3. Lifetime Learning Credit -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-sm font-semibold text-slate-800">Lifetime Learning Credit (LLC)</span>
+                                    <button type="button" class="text-indigo-600 hover:text-indigo-800" onclick="showInfoModal('Lifetime Learning Credit', 'Credit for qualified tuition and related expenses paid for eligible students enrolled in undergraduate, graduate, or professional degree courses.')">
+                                        <i class="fa-regular fa-circle-question"></i>
+                                    </button>
+                                </div>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasLLC" value="Yes" onchange="toggleConditional('llcBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasLLC" value="No" onchange="toggleConditional('llcBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="llcBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Lifetime Learning Credit Amount ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="llcAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 4. Premium Tax Credit for Health Insurance -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-sm font-semibold text-slate-800">Premium Tax Credit for Health Insurance</span>
+                                    <button type="button" class="text-indigo-600 hover:text-indigo-800" onclick="showInfoModal('Premium Tax Credit', 'Refundable tax credit that helps eligible individuals and families cover premiums for health insurance purchased through the Health Insurance Marketplace.')">
+                                        <i class="fa-regular fa-circle-question"></i>
+                                    </button>
+                                </div>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasPTC" value="Yes" onchange="toggleConditional('ptcBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasPTC" value="No" onchange="toggleConditional('ptcBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="ptcBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Premium Tax Credit Amount ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="ptcAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 5. Retirement Savings Contributions Credit -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-sm font-semibold text-slate-800">Retirement Savings Contributions Credit (Saver's Credit)</span>
+                                    <button type="button" class="text-indigo-600 hover:text-indigo-800" onclick="showInfoModal('Retirement Savings Contributions Credit (Saver’s Credit)', 'A special tax credit for low- and moderate-income taxpayers who make eligible contributions to an IRA or employer-sponsored retirement plan (like a 401(k)).')">
+                                        <i class="fa-regular fa-circle-question"></i>
+                                    </button>
+                                </div>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasSavers" value="Yes" onchange="toggleConditional('saversBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasSavers" value="No" onchange="toggleConditional('saversBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="saversBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Saver's Credit Amount ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="saversAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 6. Residential Energy Credit -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-sm font-semibold text-slate-800">Residential Energy Credit</span>
+                                    <button type="button" class="text-indigo-600 hover:text-indigo-800" onclick="showInfoModal('Residential Energy Credit', 'Credit for qualified clean energy home improvements such as solar panel installations, solar water heaters, or energy-efficient heat pumps.')">
+                                        <i class="fa-regular fa-circle-question"></i>
+                                    </button>
+                                </div>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasEnergy" value="Yes" onchange="toggleConditional('energyBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasEnergy" value="No" onchange="toggleConditional('energyBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="energyBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Residential Energy Credit Amount ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="energyAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 7. Foreign Tax Credit -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <span class="text-sm font-semibold text-slate-800">Foreign Tax Credit</span>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasForeign" value="Yes" onchange="toggleConditional('foreignBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasForeign" value="No" onchange="toggleConditional('foreignBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="foreignBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Foreign Tax Credit Amount ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="foreignAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 8. Other Tax Credits -->
+                        <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <span class="text-sm font-semibold text-slate-800">Other Tax Credits</span>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasOtherCred" value="Yes" onchange="toggleConditional('otherCredBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="hasOtherCred" value="No" onchange="toggleConditional('otherCredBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="otherCredBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Other Tax Credits Amount ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="otherCredAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ========================================== -->
+                <!-- STEP 6: PAID TAXES & RESULTS / DETAILS     -->
+                <!-- ========================================== -->
+                <div id="step6" class="step-content p-6 sm:p-8 hidden">
+                    <div class="border-b border-slate-200 pb-4 mb-6">
+                        <h2 class="text-xl font-bold text-slate-900">Step 6: Paid Taxes & Final Results</h2>
+                        <p class="text-sm text-slate-500 mt-1">Verify your federal taxes already paid through paycheck withholding and open the Details breakdown.</p>
+                    </div>
+
+                    <!-- Paid Taxes Verification Card -->
+                    <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200 mb-6 space-y-4">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                                <span class="text-sm font-bold text-slate-800 block">IRS Federal Taxes Withheld Through Your Paycheck (W-2 Line 2)</span>
+                                <span class="text-xs text-slate-500">Pulled from your Step 2 W-2 entry. If this is $0.00, double-check Step 2!</span>
+                            </div>
+                            <span id="paidTaxesCheck" class="text-lg font-extrabold text-indigo-700 bg-white px-4 py-1.5 rounded-xl border border-indigo-200 self-start sm:self-center">$0.00</span>
+                        </div>
+
+                        <!-- Any Other Taxes Paid (Unselected by default) -->
+                        <div class="pt-3 border-t border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <span class="text-sm font-medium text-slate-800">Any Other Taxes Paid (e.g., Quarterly Estimated Tax Payments)?</span>
+                                <div class="flex space-x-2 shrink-0">
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="otherPaidTaxes" value="Yes" onchange="toggleConditional('otherPaidBox', true); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-yes inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">Yes</span>
+                                    </label>
+                                    <label class="yn-label cursor-pointer">
+                                        <input type="radio" name="otherPaidTaxes" value="No" onchange="toggleConditional('otherPaidBox', false); checkStepCompletion();">
+                                        <span class="yn-btn yn-btn-no inline-block w-16 text-center py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">No</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="otherPaidBox" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Additional Federal Taxes Paid ($):</label>
+                                <div class="relative w-52">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                                    <input type="number" step="0.01" id="otherPaidAmt" placeholder="0.00" class="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold" oninput="calculateTaxes()">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Student Name Warning if Not Locked -->
+                    <div id="step6LockWarning" class="mb-6 p-4 rounded-xl bg-amber-50 border-2 border-amber-300 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div class="flex items-start space-x-3">
+                            <i class="fa-solid fa-lock text-amber-600 text-xl mt-0.5"></i>
+                            <div>
+                                <h4 class="font-bold text-sm">Student Name Lock-In Required</h4>
+                                <p class="text-xs text-amber-800 mt-0.5">You must lock in your full name on Step 1 before opening the Details screen for your assignment screenshot.</p>
+                            </div>
+                        </div>
+                        <button type="button" onclick="goToStep(1)" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg shadow shrink-0">
+                            Go to Step 1 to Lock Name
+                        </button>
+                    </div>
+
+                    <!-- Primary Hero Outcome Banner -->
+                    <div id="resultBanner" class="p-6 sm:p-8 rounded-2xl border-2 mb-6 text-center shadow-sm transition-all bg-emerald-50 border-emerald-300 text-emerald-950">
+                        <span id="resultLabel" class="text-xs font-extrabold uppercase tracking-widest block mb-1">ESTIMATED TAX REFUND</span>
+                        <h3 id="resultAmount" class="text-4xl sm:text-5xl font-extrabold my-2 tracking-tight">$0.00</h3>
+                        <p id="resultDesc" class="text-sm opacity-90 max-w-lg mx-auto">Review your summary metrics below and click "Details" for the complete breakdown.</p>
+                    </div>
+
+                    <!-- Summary Metrics Grid -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-8">
+                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
+                            <span class="text-[11px] font-bold text-slate-500 uppercase block">Total Gross Income</span>
+                            <span id="resGrossIncome" class="text-base sm:text-lg font-extrabold text-slate-800 mt-1 block">$0.00</span>
+                        </div>
+                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
+                            <span class="text-[11px] font-bold text-slate-500 uppercase block">Above-Line Deductions</span>
+                            <span id="resAdjustments" class="text-base sm:text-lg font-extrabold text-amber-700 mt-1 block">-$0.00</span>
+                        </div>
+                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
+                            <span class="text-[11px] font-bold text-slate-500 uppercase block">Estimated AGI</span>
+                            <span id="resAGI" class="text-base sm:text-lg font-extrabold text-indigo-700 mt-1 block">$0.00</span>
+                        </div>
+                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
+                            <span class="text-[11px] font-bold text-slate-500 uppercase block">Total Paid / Withheld</span>
+                            <span id="resWithheld" class="text-base sm:text-lg font-extrabold text-emerald-700 mt-1 block">$0.00</span>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
+                        <button type="button" onclick="openDetailsModal()" class="w-full sm:w-auto px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-base rounded-xl shadow-lg transition flex items-center justify-center space-x-2">
+                            <i class="fa-solid fa-magnifying-glass-chart"></i>
+                            <span>Details</span>
+                        </button>
+                        <button type="button" onclick="confirmReset()" class="w-full sm:w-auto px-5 py-3.5 bg-white hover:bg-rose-50 text-rose-600 font-semibold text-sm rounded-xl border border-slate-300 hover:border-rose-300 transition flex items-center justify-center space-x-2">
+                            <i class="fa-solid fa-rotate-left"></i>
+                            <span>Reset Simulator</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Wizard Footer Navigation -->
+                <div class="bg-slate-50 px-6 py-4 border-t border-slate-200 flex items-center justify-between">
+                    <button type="button" id="prevBtn" onclick="navigateStep(-1)" class="px-5 py-2.5 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition" disabled>
+                        <i class="fa-solid fa-arrow-left mr-1.5"></i> Previous
+                    </button>
+                    <button type="button" id="nextBtn" onclick="navigateStep(1)" class="px-6 py-2.5 text-sm font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 shadow transition flex items-center">
+                        <span>Next Page</span> <i class="fa-solid fa-arrow-right ml-2"></i>
+                    </button>
+                </div>
+
+            </form>
+        </div>
+    </main>
+
+    <!-- ========================================== -->
+    <!-- TOOLTIP / EXPLANATION INFO MODAL           -->
+    <!-- ========================================== -->
+    <div id="infoModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div class="flex items-center space-x-2.5 mb-3">
+                <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                    <i class="fa-solid fa-circle-question"></i>
+                </div>
+                <h3 id="infoModalTitle" class="font-bold text-lg text-slate-900">Tax Information</h3>
+            </div>
+            <p id="infoModalBody" class="text-sm text-slate-600 leading-relaxed mb-6"></p>
+            <button type="button" onclick="closeInfoModal()" class="w-full py-2.5 bg-indigo-600 text-white font-bold text-sm rounded-xl hover:bg-indigo-700 transition">Got it</button>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- NAME LOCK REQUIRED ALERT MODAL             -->
+    <!-- ========================================== -->
+    <div id="lockRequiredModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border-2 border-amber-300 text-center">
+            <div class="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto mb-3 text-xl">
+                <i class="fa-solid fa-user-lock"></i>
+            </div>
+            <h3 class="font-bold text-lg text-slate-900 mb-2">Student Name Lock-In Required</h3>
+            <p class="text-sm text-slate-600 leading-relaxed mb-6">
+                Before viewing the final <strong>Details</strong> breakdown screen, you must enter your full name and click <strong>"Lock In Student Name"</strong> so your name appears on your screenshot.
+            </p>
+            <div class="flex gap-3">
+                <button type="button" onclick="closeLockRequiredModal()" class="flex-1 py-2.5 bg-slate-100 text-slate-700 font-semibold text-sm rounded-xl hover:bg-slate-200 transition">Cancel</button>
+                <button type="button" onclick="closeLockRequiredModal(); goToStep(1);" class="flex-1 py-2.5 bg-indigo-600 text-white font-bold text-sm rounded-xl hover:bg-indigo-700 transition">Go to Step 1</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- RESET CONFIRMATION MODAL                   -->
+    <!-- ========================================== -->
+    <div id="resetModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 text-center">
+            <div class="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-3 text-xl">
+                <i class="fa-solid fa-rotate-left"></i>
+            </div>
+            <h3 class="font-bold text-lg text-slate-900 mb-2">Reset Entire Tax Simulator?</h3>
+            <p class="text-sm text-slate-600 leading-relaxed mb-6">
+                This will clear all of your selected answers and entered numbers across all 6 steps. Are you sure you want to start over?
+            </p>
+            <div class="flex gap-3">
+                <button type="button" onclick="closeResetModal()" class="flex-1 py-2.5 bg-slate-100 text-slate-700 font-semibold text-sm rounded-xl hover:bg-slate-200 transition">Keep My Work</button>
+                <button type="button" onclick="performReset()" class="flex-1 py-2.5 bg-rose-600 text-white font-bold text-sm rounded-xl hover:bg-rose-700 transition">Yes, Reset All</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- FINAL DETAILS SCREENSHOT BREAKDOWN MODAL   -->
+    <!-- ========================================== -->
+    <div id="detailsModal" class="fixed inset-0 bg-slate-900/75 backdrop-blur-sm z-50 hidden flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl max-w-2xl w-full p-5 sm:p-8 shadow-2xl my-6 border-2 border-slate-300">
+            <!-- Modal Header -->
+            <div class="flex items-start justify-between pb-4 border-b border-slate-200 mb-4">
+                <div>
+                    <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-600">2026 Federal Tax Simulation Report</span>
+                    <h3 class="text-xl sm:text-2xl font-extrabold text-slate-900">Tax Return Calculation Details</h3>
+                </div>
+                <button type="button" onclick="closeDetailsModal()" class="no-print text-slate-400 hover:text-slate-700 text-2xl font-bold leading-none px-2">&times;</button>
+            </div>
+
+            <!-- Prominent Verified Student Identity Banner -->
+            <div class="mb-5 p-4 rounded-xl bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-md">
+                <div>
+                    <span class="text-[10px] uppercase tracking-widest text-slate-400 block font-semibold">Verified Taxpayer / Student Name</span>
+                    <span id="dtlStudentName" class="text-lg sm:text-xl font-extrabold text-white tracking-tight">Student Name</span>
+                    <span id="dtlLockMeta" class="block text-[11px] text-emerald-300 mt-0.5 font-medium"></span>
+                </div>
+                <div class="flex flex-col sm:items-end">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                        <i class="fa-solid fa-lock mr-1.5"></i> Permanently Locked Record
+                    </span>
+                    <span id="dtlSessionId" class="text-[11px] font-mono text-slate-300 mt-1"></span>
+                    <span id="dtlTimestamp" class="text-[11px] text-slate-400 mt-0.5"></span>
+                </div>
+            </div>
+
+            <!-- Hero Refund / Owed Callout -->
+            <div id="dtlBanner" class="p-4 sm:p-5 rounded-xl text-center border-2 mb-5">
+                <span id="dtlOutcomeLabel" class="text-xs font-extrabold uppercase tracking-widest block mb-1">ESTIMATED TAX REFUND</span>
+                <span id="dtlOutcomeValue" class="text-3xl sm:text-4xl font-extrabold">$0.00</span>
+            </div>
+
+            <!-- Detailed Line-by-Line Calculation Breakdown -->
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 text-xs sm:text-sm text-slate-700">
+                <div class="flex justify-between py-1 border-b border-slate-200">
+                    <span class="text-slate-600">Filing Status</span>
+                    <span id="dtlFilingStatus" class="font-bold text-slate-900">—</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-slate-200">
+                    <span class="font-medium">Total Gross Income <span id="dtlIncomeBreakdown" class="text-[11px] text-slate-500 font-normal"></span></span>
+                    <span id="dtlGross" class="font-bold text-slate-900">$0.00</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-slate-200">
+                    <span class="font-medium">Less: Above-the-Line Deductions</span>
+                    <span id="dtlDeductions" class="font-bold text-amber-700">-$0.00</span>
+                </div>
+                <div class="flex justify-between py-1.5 px-2.5 rounded-lg bg-indigo-50 border border-indigo-100">
+                    <span class="font-bold text-indigo-950">Adjusted Gross Income (AGI)</span>
+                    <span id="dtlAGI" class="font-extrabold text-indigo-950">$0.00</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-slate-200">
+                    <span class="font-medium">Less: <span id="dtlDedTypeLabel">Standard Deduction (2026)</span></span>
+                    <span id="dtlStandardDed" class="font-bold text-slate-800">-$0.00</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-slate-200">
+                    <span class="font-bold text-slate-900">Taxable Income</span>
+                    <span id="dtlTaxableIncome" class="font-bold text-slate-900">$0.00</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-slate-200">
+                    <span class="font-medium">Calculated Federal Income Tax (2026 Brackets)</span>
+                    <span id="dtlIncomeTax" class="font-bold text-slate-800">$0.00</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-slate-200">
+                    <span class="font-medium">Plus: Other Taxes</span>
+                    <span id="dtlOtherTaxes" class="font-bold text-slate-800">+$0.00</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-slate-200">
+                    <span class="font-medium">Less: Total Tax Credits Applied</span>
+                    <span id="dtlCredits" class="font-bold text-emerald-700">-$0.00</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-slate-200">
+                    <span class="font-bold text-slate-900">Total Tax Liability After Credits</span>
+                    <span id="dtlNetTax" class="font-bold text-rose-700">$0.00</span>
+                </div>
+                <div class="flex justify-between py-1">
+                    <span class="font-medium">Less: Federal Taxes Paid / Withheld (W-2 Line 2 + Other)</span>
+                    <span id="dtlWithheld" class="font-bold text-emerald-700">$0.00</span>
+                </div>
+            </div>
+
+            <!-- Modal Footer Actions -->
+            <div class="no-print mt-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <p class="text-xs text-slate-500">
+                    <i class="fa-solid fa-camera mr-1 text-indigo-600"></i> Take your full-screen assignment screenshot now.
+                </p>
+                <div class="flex gap-3 w-full sm:w-auto">
+                    <button type="button" onclick="window.print()" class="flex-1 sm:flex-initial px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-sm rounded-xl border border-slate-300 transition">
+                        <i class="fa-solid fa-print mr-1.5"></i> Print / PDF
+                    </button>
+                    <button type="button" onclick="closeDetailsModal()" class="flex-1 sm:flex-initial px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-xl transition">
+                        Close Details
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-slate-900 text-slate-400 py-5 text-center text-xs border-t border-slate-800">
+        <p>&copy; 2026 Federal Tax E-Filing Simulator &bull; Updated for 2026 IRS Tax Brackets &amp; $16,100 Standard Deduction</p>
+    </footer>
+
+    <!-- ========================================== -->
+    <!-- JAVASCRIPT SIMULATION ENGINE               -->
+    <!-- ========================================== -->
+    <script>
+        let currentStep = 1;
+        let isStudentNameLocked = false;
+        let lockedStudentName = '';
+        let lockedAtTimestamp = '';
+        let sessionIntegrityId = '';
+
+        const SESSION_LOCK_KEY = 'taxSim2026_lockedStudentRecord';
+
+        const stepTitles = {
+            1: "Step 1: Student Lock-In & Filing Status",
+            2: "Step 2: Tax Year Income & Federal Withholding",
+            3: "Step 3: Deductions & Adjustments to Income",
+            4: "Step 4: Other Taxes",
+            5: "Step 5: Tax Credits",
+            6: "Step 6: Paid Taxes & Final Results"
+        };
+
+        // Format currency helper
+        function formatCurrency(val) {
+            return '$' + Number(val || 0).toLocaleString('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
+
+        // Generate a short session verification ID
+        function generateSessionId() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let code = 'SIM-';
+            for (let i = 0; i < 6; i++) {
+                code += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return code;
+        }
+
+        // Apply permanent locked UI state (no Edit or Unlock button)
+        function applyPermanentLockUI(name, lockedTime, sessionId) {
+            const input = document.getElementById('studentNameInput');
+            const btn = document.getElementById('lockNameBtn');
+            const pill = document.getElementById('permanentLockedPill');
+            const pillText = document.getElementById('permanentLockedPillText');
+            const card = document.getElementById('studentLockCard');
+            const badge = document.getElementById('lockStatusBadge');
+            const headerBadge = document.getElementById('headerStudentBadge');
+            const errorMsg = document.getElementById('nameErrorMsg');
+            const helpNotice = document.getElementById('nameHelpNotice');
+            const step6Warn = document.getElementById('step6LockWarning');
+
+            isStudentNameLocked = true;
+            lockedStudentName = name;
+            lockedAtTimestamp = lockedTime;
+            sessionIntegrityId = sessionId;
+
+            if (errorMsg) errorMsg.classList.add('hidden');
+
+            input.value = lockedStudentName;
+            input.readOnly = true;
+            input.disabled = true;
+            input.classList.add('bg-emerald-50', 'border-emerald-400', 'text-emerald-950', 'cursor-not-allowed', 'select-none');
+            input.classList.remove('bg-white', 'border-slate-300');
+
+            // Hide the lock button permanently and show permanent locked pill
+            btn.classList.add('hidden');
+            pill.classList.remove('hidden');
+            pillText.innerText = `Locked: ${lockedStudentName}`;
+
+            card.classList.remove('bg-indigo-50/80', 'border-indigo-200');
+            card.classList.add('bg-emerald-50/70', 'border-emerald-300');
+
+            badge.className = "inline-flex items-center self-start sm:self-center px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300";
+            badge.innerHTML = `<i class="fa-solid fa-lock mr-1.5"></i> Permanently Locked`;
+
+            if (helpNotice) {
+                helpNotice.innerHTML = `<i class="fa-solid fa-shield-check mr-1 text-emerald-600"></i> Name locked at <strong>${escapeHtml(lockedAtTimestamp)}</strong> (Session ID: <span class="font-mono">${escapeHtml(sessionIntegrityId)}</span>).`;
+            }
+
+            headerBadge.className = "inline-flex items-center text-xs text-emerald-300 font-semibold";
+            headerBadge.onclick = null;
+            headerBadge.innerHTML = `<i class="fa-solid fa-lock mr-1.5 text-[11px]"></i> Student: ${escapeHtml(lockedStudentName)}`;
+
+            if (step6Warn) step6Warn.classList.add('hidden');
+        }
+
+        // Permanent Student Name Lock-In (persisted in sessionStorage)
+        function lockStudentNamePermanently() {
+            if (isStudentNameLocked) return;
+
+            const input = document.getElementById('studentNameInput');
+            const errorMsg = document.getElementById('nameErrorMsg');
+            const rawName = input.value.trim();
+
+            if (!rawName) {
+                errorMsg.classList.remove('hidden');
+                input.focus();
+                return;
+            }
+
+            const now = new Date();
+            const timestampStr = `${now.toLocaleDateString('en-US')} at ${now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+            const sessId = generateSessionId();
+
+            try {
+                sessionStorage.setItem(SESSION_LOCK_KEY, JSON.stringify({
+                    name: rawName,
+                    lockedAt: timestampStr,
+                    sessionId: sessId
+                }));
+            } catch (e) {
+                // Fallback if sessionStorage is restricted in sandboxed iframe
+            }
+
+            applyPermanentLockUI(rawName, timestampStr, sessId);
+        }
+
+        // Restore locked student name from sessionStorage if present
+        function restoreSessionLock() {
+            try {
+                const saved = sessionStorage.getItem(SESSION_LOCK_KEY);
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (parsed && parsed.name) {
+                        applyPermanentLockUI(
+                            parsed.name,
+                            parsed.lockedAt || 'Earlier this session',
+                            parsed.sessionId || generateSessionId()
+                        );
+                    }
+                }
+            } catch (e) {
+                // Ignore storage read errors
+            }
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // Toggle conditional numeric box visibility and clear inputs when "No" is chosen
+        function toggleConditional(boxId, show) {
+            const box = document.getElementById(boxId);
+            if (!box) return;
+            if (show) {
+                box.classList.remove('hidden');
+            } else {
+                box.classList.add('hidden');
+                const inputs = box.querySelectorAll('input');
+                inputs.forEach(inp => inp.value = '');
+            }
+            calculateTaxes();
+        }
+
+        function toggleItemizedInput(isItemized) {
+            const box = document.getElementById('itemizedBox');
+            if (isItemized) {
+                box.classList.remove('hidden');
+            } else {
+                box.classList.add('hidden');
+                document.getElementById('itemizedAmt').value = '';
+            }
+            calculateTaxes();
+        }
+
+        // Step Navigation
+        function navigateStep(direction) {
+            const target = currentStep + direction;
+            if (target >= 1 && target <= 6) {
+                goToStep(target);
+            }
+        }
+
+        function goToStep(step) {
+            document.getElementById(`step${currentStep}`).classList.add('hidden');
+            currentStep = step;
+            document.getElementById(`step${currentStep}`).classList.remove('hidden');
+
+            const percent = Math.round((currentStep / 6) * 100);
+            document.getElementById('progressBar').style.width = `${percent}%`;
+            document.getElementById('progressPercent').innerText = `Step ${currentStep} of 6 (${percent}%)`;
+            document.getElementById('stepTitleTracker').innerText = stepTitles[currentStep];
+
+            document.getElementById('prevBtn').disabled = (currentStep === 1);
+            const nextBtn = document.getElementById('nextBtn');
+            if (currentStep === 6) {
+                nextBtn.innerHTML = `<span>View Details</span> <i class="fa-solid fa-magnifying-glass-chart ml-2"></i>`;
+                nextBtn.onclick = () => openDetailsModal();
+            } else {
+                nextBtn.innerHTML = `<span>Next Page</span> <i class="fa-solid fa-arrow-right ml-2"></i>`;
+                nextBtn.onclick = () => navigateStep(1);
+            }
+
+            // Update Step Pills
+            for (let i = 1; i <= 6; i++) {
+                const pill = document.getElementById(`stepPill${i}`);
+                if (!pill) continue;
+                const badge = pill.querySelector('span:first-child');
+                if (i === currentStep) {
+                    badge.className = "w-6 h-6 rounded-full flex items-center justify-center text-xs step-active font-bold shrink-0";
+                    pill.className = "step-pill flex items-center justify-center sm:justify-start space-x-1.5 text-xs font-bold text-indigo-600 p-1.5 rounded-lg bg-indigo-50/70 transition";
+                } else if (i < currentStep) {
+                    badge.className = "w-6 h-6 rounded-full flex items-center justify-center text-xs step-complete font-bold shrink-0";
+                    pill.className = "step-pill flex items-center justify-center sm:justify-start space-x-1.5 text-xs font-semibold text-emerald-700 p-1.5 rounded-lg hover:bg-slate-50 transition";
+                } else {
+                    badge.className = "w-6 h-6 rounded-full flex items-center justify-center text-xs step-inactive font-bold shrink-0";
+                    pill.className = "step-pill flex items-center justify-center sm:justify-start space-x-1.5 text-xs font-medium text-slate-400 p-1.5 rounded-lg hover:bg-slate-50 transition";
+                }
+            }
+
+            calculateTaxes();
+            checkStepCompletion();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Check if current step has unanswered radio groups
+        function checkStepCompletion() {
+            const stepContainer = document.getElementById(`step${currentStep}`);
+            const radios = stepContainer.querySelectorAll('input[type="radio"]');
+            const groupNames = new Set();
+            radios.forEach(r => groupNames.add(r.name));
+
+            let unansweredCount = 0;
+            groupNames.forEach(name => {
+                const checked = stepContainer.querySelector(`input[name="${name}"]:checked`);
+                if (!checked) unansweredCount++;
+            });
+
+            if (currentStep === 1 && !document.getElementById('filingStatus').value) {
+                unansweredCount++;
+            }
+
+            const banner = document.getElementById('unansweredBanner');
+            const bannerText = document.getElementById('unansweredBannerText');
+            if (unansweredCount > 0) {
+                banner.classList.remove('hidden');
+                bannerText.innerText = `Reminder: You have ${unansweredCount} unanswered item${unansweredCount > 1 ? 's' : ''} on this page. Be sure to select an option for every question.`;
+            } else {
+                banner.classList.add('hidden');
+            }
+        }
+
+        // Helper to read numeric value only if corresponding radio is "Yes"
+        function getConditionalAmount(radioName, inputId, allowNegative = false) {
+            const isYes = document.querySelector(`input[name="${radioName}"]:checked`)?.value === 'Yes';
+            if (!isYes) return 0;
+            const val = parseFloat(document.getElementById(inputId)?.value);
+            if (isNaN(val)) return 0;
+            return allowNegative ? val : Math.max(0, val);
+        }
+
+        // Core 2026 Tax Calculation Engine
+        function calculateTaxes() {
+            // STEP 1: Filing Status & Personal Info
+            const filingStatus = document.getElementById('filingStatus').value;
+            const isAge65 = document.querySelector('input[name="age65"]:checked')?.value === 'Yes';
+            const isBlind = document.querySelector('input[name="legallyBlind"]:checked')?.value === 'Yes';
+            const claimedByOther = document.querySelector('input[name="claimedByOther"]:checked')?.value === 'Yes';
+
+            // STEP 2: Income & Withholding
+            const hasW2 = document.querySelector('input[name="hasW2"]:checked')?.value === 'Yes';
+            const w2Wages = hasW2 ? Math.max(0, parseFloat(document.getElementById('w2Wages').value) || 0) : 0;
+            const w2Withheld = hasW2 ? Math.max(0, parseFloat(document.getElementById('w2Withheld').value) || 0) : 0;
+
+            const overtimeAmt = getConditionalAmount('hasOvertime', 'overtimeAmt');
+            const tipsAmt = getConditionalAmount('hasTips', 'tipsAmt');
+            const ssbAmt = getConditionalAmount('hasSSB', 'ssbAmt');
+            const ltcgAmt = getConditionalAmount('hasLTCG', 'ltcgAmt', true);
+            const stcgAmt = getConditionalAmount('hasSTCG', 'stcgAmt', true);
+            const selfEmpAmt = getConditionalAmount('hasSelfEmp', 'selfEmpAmt');
+            const retirementIncAmt = getConditionalAmount('hasRetirementInc', 'retirementIncAmt');
+            const interestAmt = getConditionalAmount('hasInterest', 'interestAmt');
+            const sched1Amt = getConditionalAmount('hasSched1', 'sched1Amt');
+
+            // Cap net capital loss deduction at -$3,000 per IRS rules
+            const netCapitalGains = Math.max(-3000, ltcgAmt + stcgAmt);
+            const ordinaryGrossIncome = w2Wages + overtimeAmt + tipsAmt + ssbAmt + Math.max(-3000, stcgAmt + Math.min(0, ltcgAmt)) + selfEmpAmt + retirementIncAmt + interestAmt + sched1Amt;
+            const positiveLTCG = Math.max(0, ltcgAmt + Math.min(0, stcgAmt));
+
+            const totalGrossIncome = Math.max(0, w2Wages + overtimeAmt + tipsAmt + ssbAmt + netCapitalGains + selfEmpAmt + retirementIncAmt + interestAmt + sched1Amt);
+
+            // STEP 3: Above-the-Line Deductions
+            const educatorAmt = getConditionalAmount('hasEducator', 'educatorAmt');
+            const reservistAmt = getConditionalAmount('hasReservist', 'reservistAmt');
+            const hsaAmt = getConditionalAmount('hasHSA', 'hsaAmt');
+            const studentLoanAmt = getConditionalAmount('hasStudentLoan', 'studentLoanAmt');
+            const iraAmt = getConditionalAmount('hasIRA', 'iraAmt');
+            const earlyPenaltyAmt = getConditionalAmount('hasEarlyPenalty', 'earlyPenaltyAmt');
+            const alimonyAmt = getConditionalAmount('hasAlimony', 'alimonyAmt');
+            const movingAmt = getConditionalAmount('hasMoving', 'movingAmt');
+            const seHealthAmt = getConditionalAmount('hasSEHealth', 'seHealthAmt');
+            const seRetireAmt = getConditionalAmount('hasSERetire', 'seRetireAmt');
+            const charityAmt = getConditionalAmount('hasCharity', 'charityAmt');
+            const otherDedAmt = getConditionalAmount('hasOtherDed', 'otherDedAmt');
+
+            const totalAboveLineDeductions = educatorAmt + reservistAmt + hsaAmt + studentLoanAmt + iraAmt +
+                                             earlyPenaltyAmt + alimonyAmt + movingAmt + seHealthAmt +
+                                             seRetireAmt + charityAmt + otherDedAmt;
+
+            // Adjusted Gross Income (AGI)
+            const agi = Math.max(0, totalGrossIncome - totalAboveLineDeductions);
+
+            // 2026 Standard Deduction Calculation ($16,100 for Single)
+            let baseStandardDed = 16100;
+            let statusLabel = "2026 Single";
+            if (filingStatus === 'Married Filing Jointly') {
+                baseStandardDed = 32200;
+                statusLabel = "2026 Married Joint";
+            } else if (filingStatus === 'Head of Household') {
+                baseStandardDed = 24150;
+                statusLabel = "2026 Head of Household";
+            } else if (filingStatus === 'Married Filing Separately') {
+                baseStandardDed = 16100;
+                statusLabel = "2026 Married Separate";
+            }
+
+            // Additional standard deduction for 65+ or blind (2026: +$2,050 Single/HoH, +$1,650 Married)
+            const addPerCondition = (filingStatus === 'Married Filing Jointly' || filingStatus === 'Married Filing Separately') ? 1650 : 2050;
+            let extraStdDed = 0;
+            if (isAge65) extraStdDed += addPerCondition;
+            if (isBlind) extraStdDed += addPerCondition;
+
+            let effectiveStandardDed = baseStandardDed + extraStdDed;
+
+            // IRS Dependent Standard Deduction Rule if claimed by another taxpayer:
+            // Greater of $1,350 or (Earned Income + $450), capped at base standard deduction + extra
+            const earnedIncome = w2Wages + overtimeAmt + tipsAmt + selfEmpAmt;
+            if (claimedByOther) {
+                const dependentCap = Math.min(baseStandardDed, Math.max(1350, earnedIncome + 450));
+                effectiveStandardDed = dependentCap + extraStdDed;
+            }
+
+            // Update Standard Deduction label in Step 3
+            const stdDisplay = document.getElementById('standardDedDisplay');
+            if (stdDisplay) {
+                if (claimedByOther && effectiveStandardDed < (baseStandardDed + extraStdDed)) {
+                    stdDisplay.innerText = `${formatCurrency(effectiveStandardDed)} (Dependent Rule; Base ${statusLabel}: $16,100)`;
+                } else {
+                    stdDisplay.innerText = `${formatCurrency(effectiveStandardDed)} (${statusLabel})`;
+                }
+            }
+
+            // Deduction Method (Standard vs Itemized)
+            const dedMethod = document.querySelector('input[name="deductionMethod"]:checked')?.value;
+            let appliedDeduction = 0;
+            let dedMethodLabel = "Standard Deduction (2026)";
+            if (dedMethod === 'Itemized') {
+                appliedDeduction = Math.max(0, parseFloat(document.getElementById('itemizedAmt').value) || 0);
+                dedMethodLabel = "Itemized Deductions";
+            } else if (dedMethod === 'Standard') {
+                appliedDeduction = effectiveStandardDed;
+                dedMethodLabel = `Standard Deduction (${statusLabel})`;
+            } else {
+                // Default calculation preview uses 2026 Standard Deduction until student selects a method
+                appliedDeduction = effectiveStandardDed;
+                dedMethodLabel = `Standard Deduction (${statusLabel})`;
+            }
+
+            // Taxable Income
+            const taxableIncome = Math.max(0, agi - appliedDeduction);
+
+            // Split Taxable Income into Ordinary vs Long-Term Capital Gains for 2026 Brackets
+            const taxableLTCG = Math.min(taxableIncome, positiveLTCG);
+            const taxableOrdinary = Math.max(0, taxableIncome - taxableLTCG);
+
+            // 2026 Federal Ordinary Income Tax Brackets
+            let ordinaryTax = 0;
+            if (filingStatus === 'Married Filing Jointly') {
+                if (taxableOrdinary <= 24800) ordinaryTax = taxableOrdinary * 0.10;
+                else if (taxableOrdinary <= 100800) ordinaryTax = 2480 + (taxableOrdinary - 24800) * 0.12;
+                else if (taxableOrdinary <= 211400) ordinaryTax = 11600 + (taxableOrdinary - 100800) * 0.22;
+                else if (taxableOrdinary <= 403550) ordinaryTax = 35932 + (taxableOrdinary - 211400) * 0.24;
+                else ordinaryTax = 82048 + (taxableOrdinary - 403550) * 0.32;
+            } else if (filingStatus === 'Head of Household') {
+                if (taxableOrdinary <= 17700) ordinaryTax = taxableOrdinary * 0.10;
+                else if (taxableOrdinary <= 67450) ordinaryTax = 1770 + (taxableOrdinary - 17700) * 0.12;
+                else if (taxableOrdinary <= 105700) ordinaryTax = 7740 + (taxableOrdinary - 67450) * 0.22;
+                else if (taxableOrdinary <= 201750) ordinaryTax = 16155 + (taxableOrdinary - 105700) * 0.24;
+                else ordinaryTax = 39203 + (taxableOrdinary - 201750) * 0.32;
+            } else {
+                // 2026 Single / Married Filing Separately Brackets
+                if (taxableOrdinary <= 12400) ordinaryTax = taxableOrdinary * 0.10;
+                else if (taxableOrdinary <= 50400) ordinaryTax = 1240 + (taxableOrdinary - 12400) * 0.12;
+                else if (taxableOrdinary <= 105700) ordinaryTax = 5800 + (taxableOrdinary - 50400) * 0.22;
+                else if (taxableOrdinary <= 201775) ordinaryTax = 17966 + (taxableOrdinary - 105700) * 0.24;
+                else ordinaryTax = 41024 + (taxableOrdinary - 201775) * 0.32;
+            }
+
+            // 2026 Long-Term Capital Gains Tax (0% up to $49,450 Single / $98,900 MFJ)
+            let ltcgTax = 0;
+            const zeroBracketCap = (filingStatus === 'Married Filing Jointly') ? 98900 : (filingStatus === 'Head of Household' ? 66200 : 49450);
+            if (taxableLTCG > 0) {
+                const remainingZeroSpace = Math.max(0, zeroBracketCap - taxableOrdinary);
+                const taxedAt15 = Math.max(0, taxableLTCG - remainingZeroSpace);
+                ltcgTax = taxedAt15 * 0.15;
+            }
+
+            const calculatedIncomeTax = ordinaryTax + ltcgTax;
+
+            // STEP 4: Other Taxes
+            const amtAmt = getConditionalAmount('taxAMT', 'amtAmt');
+            const homebuyerAmt = getConditionalAmount('taxHomebuyer', 'homebuyerAmt');
+            const unreportedAmt = getConditionalAmount('taxUnreported', 'unreportedAmt');
+            const premiumRepayAmt = getConditionalAmount('taxPremium', 'premiumRepayAmt');
+            const taxIraAmt = getConditionalAmount('taxIRA', 'taxIraAmt');
+            const householdAmt = getConditionalAmount('taxHousehold', 'householdAmt');
+            const otherTaxAmt = getConditionalAmount('taxOther', 'otherTaxAmt');
+
+            const totalOtherTaxes = amtAmt + homebuyerAmt + unreportedAmt + premiumRepayAmt + taxIraAmt + householdAmt + otherTaxAmt;
+
+            // STEP 5: Tax Credits (Dollar-for-Dollar)
+            const childCareAmt = getConditionalAmount('hasChildCare', 'childCareAmt');
+            const aotcAmt = getConditionalAmount('hasAOTC', 'aotcAmt');
+            const llcAmt = getConditionalAmount('hasLLC', 'llcAmt');
+            const ptcAmt = getConditionalAmount('hasPTC', 'ptcAmt');
+            const saversAmt = getConditionalAmount('hasSavers', 'saversAmt');
+            const energyAmt = getConditionalAmount('hasEnergy', 'energyAmt');
+            const foreignAmt = getConditionalAmount('hasForeign', 'foreignAmt');
+            const otherCredAmt = getConditionalAmount('hasOtherCred', 'otherCredAmt');
+
+            // Note: Up to 40% (max $1,000) of AOTC is refundable; PTC is refundable; other credits are nonrefundable
+            const refundableAOTC = Math.min(1000, aotcAmt * 0.40);
+            const nonrefundableAOTC = Math.max(0, aotcAmt - refundableAOTC);
+            const nonrefundableCredits = childCareAmt + nonrefundableAOTC + llcAmt + saversAmt + energyAmt + foreignAmt + otherCredAmt;
+            const refundableCredits = refundableAOTC + ptcAmt;
+
+            const totalCreditsEntered = childCareAmt + aotcAmt + llcAmt + ptcAmt + saversAmt + energyAmt + foreignAmt + otherCredAmt;
+
+            const taxBeforeCredits = calculatedIncomeTax + totalOtherTaxes;
+            const taxAfterNonrefundable = Math.max(0, taxBeforeCredits - nonrefundableCredits);
+            const netTaxLiability = Math.max(0, taxAfterNonrefundable - refundableCredits);
+            const excessRefundableCredits = Math.max(0, refundableCredits - taxAfterNonrefundable);
+
+            // STEP 6: Paid Taxes & Withholding
+            const otherPaidAmt = getConditionalAmount('otherPaidTaxes', 'otherPaidAmt');
+            const totalPayments = w2Withheld + otherPaidAmt + excessRefundableCredits;
+
+            // Final Difference: Positive = Refund, Negative = Amount Owed
+            const finalDifference = (w2Withheld + otherPaidAmt) - (taxAfterNonrefundable - refundableCredits);
+
+            // ==========================================
+            // UPDATE PERSISTENT HEADER & UI ELEMENTS
+            // ==========================================
+            document.getElementById('liveAGI').innerText = formatCurrency(agi);
+            const liveOutcome = document.getElementById('liveTaxOutcome');
+            if (finalDifference >= 0) {
+                liveOutcome.innerText = `${formatCurrency(finalDifference)} Refund`;
+                liveOutcome.className = "font-extrabold text-sm sm:text-lg text-emerald-400";
+            } else {
+                liveOutcome.innerText = `${formatCurrency(Math.abs(finalDifference))} Owed`;
+                liveOutcome.className = "font-extrabold text-sm sm:text-lg text-rose-400";
+            }
+
+            // Step 6 Paid Taxes Verification & Summary Cards
+            document.getElementById('paidTaxesCheck').innerText = formatCurrency(w2Withheld);
+            document.getElementById('resGrossIncome').innerText = formatCurrency(totalGrossIncome);
+            document.getElementById('resAdjustments').innerText = `-${formatCurrency(totalAboveLineDeductions)}`;
+            document.getElementById('resAGI').innerText = formatCurrency(agi);
+            document.getElementById('resWithheld').innerText = formatCurrency(w2Withheld + otherPaidAmt);
+
+            const banner = document.getElementById('resultBanner');
+            const resultLabel = document.getElementById('resultLabel');
+            const resultAmount = document.getElementById('resultAmount');
+            const resultDesc = document.getElementById('resultDesc');
+
+            if (finalDifference >= 0) {
+                banner.className = "p-6 sm:p-8 rounded-2xl border-2 mb-6 text-center shadow-sm transition-all bg-emerald-50 border-emerald-300 text-emerald-950";
+                resultLabel.innerText = "ESTIMATED TAX REFUND";
+                resultAmount.innerText = formatCurrency(finalDifference);
+                resultDesc.innerText = "Your federal tax withholdings and credits exceed your total tax liability. You are due a refund!";
+            } else {
+                banner.className = "p-6 sm:p-8 rounded-2xl border-2 mb-6 text-center shadow-sm transition-all bg-rose-50 border-rose-300 text-rose-950";
+                resultLabel.innerText = "ESTIMATED AMOUNT YOU OWE";
+                resultAmount.innerText = formatCurrency(Math.abs(finalDifference));
+                resultDesc.innerText = "Your total tax liability exceeds the federal taxes withheld from your paychecks.";
+            }
+
+            // ==========================================
+            // UPDATE DETAILS BREAKDOWN MODAL
+            // ==========================================
+            document.getElementById('dtlFilingStatus').innerText = filingStatus || "Not Selected";
+            document.getElementById('dtlGross').innerText = formatCurrency(totalGrossIncome);
+            document.getElementById('dtlDeductions').innerText = `-${formatCurrency(totalAboveLineDeductions)}`;
+            document.getElementById('dtlAGI').innerText = formatCurrency(agi);
+            document.getElementById('dtlDedTypeLabel').innerText = dedMethodLabel;
+            document.getElementById('dtlStandardDed').innerText = `-${formatCurrency(appliedDeduction)}`;
+            document.getElementById('dtlTaxableIncome').innerText = formatCurrency(taxableIncome);
+            document.getElementById('dtlIncomeTax').innerText = formatCurrency(calculatedIncomeTax);
+            document.getElementById('dtlOtherTaxes').innerText = `+${formatCurrency(totalOtherTaxes)}`;
+            document.getElementById('dtlCredits').innerText = `-${formatCurrency(totalCreditsEntered)}`;
+            document.getElementById('dtlNetTax').innerText = formatCurrency(Math.max(0, taxBeforeCredits - totalCreditsEntered));
+            document.getElementById('dtlWithheld').innerText = formatCurrency(w2Withheld + otherPaidAmt);
+
+            const dtlBanner = document.getElementById('dtlBanner');
+            const dtlOutcomeLabel = document.getElementById('dtlOutcomeLabel');
+            const dtlOutcomeValue = document.getElementById('dtlOutcomeValue');
+
+            if (finalDifference >= 0) {
+                dtlBanner.className = "p-4 sm:p-5 rounded-xl text-center border-2 mb-5 bg-emerald-50 border-emerald-300 text-emerald-950";
+                dtlOutcomeLabel.innerText = "ESTIMATED TAX REFUND";
+                dtlOutcomeValue.innerText = formatCurrency(finalDifference);
+            } else {
+                dtlBanner.className = "p-4 sm:p-5 rounded-xl text-center border-2 mb-5 bg-rose-50 border-rose-300 text-rose-950";
+                dtlOutcomeLabel.innerText = "ESTIMATED AMOUNT YOU OWE";
+                dtlOutcomeValue.innerText = formatCurrency(Math.abs(finalDifference));
+            }
+        }
+
+        // Modals
+        function showInfoModal(title, body) {
+            document.getElementById('infoModalTitle').innerText = title;
+            document.getElementById('infoModalBody').innerText = body;
+            document.getElementById('infoModal').classList.remove('hidden');
+        }
+
+        function closeInfoModal() {
+            document.getElementById('infoModal').classList.add('hidden');
+        }
+
+        function openDetailsModal() {
+            if (!isStudentNameLocked) {
+                document.getElementById('lockRequiredModal').classList.remove('hidden');
+                return;
+            }
+            calculateTaxes();
+            document.getElementById('dtlStudentName').innerText = lockedStudentName;
+            document.getElementById('dtlLockMeta').innerText = `Name Locked: ${lockedAtTimestamp}`;
+            document.getElementById('dtlSessionId').innerText = `Session ID: ${sessionIntegrityId}`;
+            const now = new Date();
+            document.getElementById('dtlTimestamp').innerText = `Report Viewed: ${now.toLocaleDateString('en-US')} at ${now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+            document.getElementById('detailsModal').classList.remove('hidden');
+        }
+
+        function closeDetailsModal() {
+            document.getElementById('detailsModal').classList.add('hidden');
+        }
+
+        function closeLockRequiredModal() {
+            document.getElementById('lockRequiredModal').classList.add('hidden');
+        }
+
+        function confirmReset() {
+            document.getElementById('resetModal').classList.remove('hidden');
+        }
+
+        function closeResetModal() {
+            document.getElementById('resetModal').classList.add('hidden');
+        }
+
+        function performReset() {
+            closeResetModal();
+            document.getElementById('taxForm').reset();
+
+            // Hide all conditional input boxes
+            const conditionalBoxes = [
+                'dependentsCountBox', 'w2Box', 'overtimeBox', 'tipsBox', 'ssbBox',
+                'ltcgBox', 'stcgBox', 'selfEmpBox', 'retirementIncBox', 'interestBox',
+                'sched1Box', 'educatorBox', 'reservistBox', 'hsaBox', 'studentLoanBox',
+                'iraBox', 'earlyPenaltyBox', 'alimonyBox', 'movingBox', 'seHealthBox',
+                'seRetireBox', 'charityBox', 'itemizedBox', 'otherDedBox', 'amtBox',
+                'homebuyerBox', 'unreportedBox', 'premiumRepayBox', 'taxIraBox',
+                'householdBox', 'otherTaxBox', 'childCareBox', 'aotcBox', 'llcBox',
+                'ptcBox', 'saversBox', 'energyBox', 'foreignBox', 'otherCredBox',
+                'otherPaidBox'
+            ];
+            conditionalBoxes.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.add('hidden');
+            });
+
+            // Preserve the permanently locked student name even after a form reset
+            if (isStudentNameLocked) {
+                applyPermanentLockUI(lockedStudentName, lockedAtTimestamp, sessionIntegrityId);
+            }
+
+            goToStep(1);
+            calculateTaxes();
+        }
+
+        window.onload = function() {
+            restoreSessionLock();
+            calculateTaxes();
+            checkStepCompletion();
+        };
+    </script>
+</body>
+</html>
